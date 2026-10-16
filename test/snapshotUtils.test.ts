@@ -49,11 +49,7 @@ describe('Filesystem snapshot and change detection', () => {
     const newFile = path.join(tmpDir.name, 'newFile.txt');
     createFile(newFile, 'New content');
 
-    const changes = await detectChanges(
-      initialSnapshot,
-      tmpDir.name,
-      Date.now() - 1000
-    );
+    const changes = await detectChanges(initialSnapshot, tmpDir.name);
 
     expect(changes).toEqual([
       {
@@ -64,6 +60,23 @@ describe('Filesystem snapshot and change detection', () => {
     ]);
   });
 
+  it('detectChanges does not depend on the clock of this process', async () => {
+    // Docker Desktop's VM clock can run behind the host's, so a file written
+    // during a run may carry an mtime that is "in the past" for this process.
+    const initialSnapshot = await getSnapshot(tmpDir.name);
+
+    const newFile = path.join(tmpDir.name, 'skewed.txt');
+    createFile(newFile, 'New content');
+    const past = new Date(Date.now() - 60_000);
+    fs.utimesSync(newFile, past, past);
+
+    const changes = await detectChanges(initialSnapshot, tmpDir.name);
+
+    expect(changes).toEqual([
+      { type: 'created', path: newFile, isDirectory: false },
+    ]);
+  });
+
   it('detectChanges detects deleted files', async () => {
     const fileToDelete = path.join(tmpDir.name, 'toDelete.txt');
     createFile(fileToDelete, 'To be deleted');
@@ -71,11 +84,7 @@ describe('Filesystem snapshot and change detection', () => {
     const snapshotBeforeDelete = await getSnapshot(tmpDir.name);
     fs.unlinkSync(fileToDelete);
 
-    const changes = await detectChanges(
-      snapshotBeforeDelete,
-      tmpDir.name,
-      Date.now() - 1000
-    );
+    const changes = await detectChanges(snapshotBeforeDelete, tmpDir.name);
 
     expect(changes).toEqual([
       {
@@ -96,11 +105,7 @@ describe('Filesystem snapshot and change detection', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     fs.writeFileSync(fileToUpdate, 'Updated');
 
-    const changes = await detectChanges(
-      snapshot,
-      tmpDir.name,
-      Date.now() - 1000
-    );
+    const changes = await detectChanges(snapshot, tmpDir.name);
 
     expect(changes).toEqual([
       {

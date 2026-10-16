@@ -376,7 +376,9 @@ describe('runJsEphemeral', () => {
         dependencies: [
           {
             name: 'playwright',
-            version: `^${playwrightVersion}`,
+            // Exact version: the image only bundles the browsers for this release,
+            // so a caret range can install a newer Playwright that finds no Chromium.
+            version: playwrightVersion,
           },
         ],
         image: PLAYWRIGHT_IMAGE,
