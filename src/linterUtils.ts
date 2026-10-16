@@ -1,11 +1,18 @@
+import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import globals from 'globals';
 import nPlugin from 'eslint-plugin-n';
 import prettierPlugin from 'eslint-plugin-prettier';
 
+// Resolve relative to this module, not process.cwd(): MCP clients start the
+// server from an arbitrary directory (e.g. the user's home folder).
+const ESLINT_CONFIG_FILE = fileURLToPath(
+  new URL('../eslint.config.js', import.meta.url)
+);
+
 const eslint = new ESLint({
   fix: true,
-  overrideConfigFile: 'eslint.config.js',
+  overrideConfigFile: ESLINT_CONFIG_FILE,
 
   overrideConfig: {
     plugins: {
