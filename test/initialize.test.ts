@@ -12,6 +12,7 @@ vi.mocked(utils).computeResourceLimits = vi
 
 vi.mock('../src/containerUtils', () => ({
   activeSandboxContainers: new Map(),
+  getSandboxLabels: () => ['mcp-sandbox=true', 'mcp-server-pid=1'],
 }));
 
 describe('initialize module', () => {
@@ -32,7 +33,7 @@ describe('initialize module', () => {
     it('should set the server run ID correctly', async () => {
       vi.doMock('../src/runUtils', () => ({
         getFilesDir: vi.fn().mockReturnValue(''),
-        getMountFlag: vi.fn().mockReturnValue(''),
+        getMountArgs: vi.fn().mockReturnValue([]),
       }));
       vi.resetModules();
       const mod = await import('../src/tools/initialize.ts');
@@ -59,7 +60,7 @@ describe('initialize module', () => {
     it('should use unknown as the default server run ID if not set', async () => {
       vi.doMock('../src/runUtils', () => ({
         getFilesDir: vi.fn().mockReturnValue(''),
-        getMountFlag: vi.fn().mockReturnValue(''),
+        getMountArgs: vi.fn().mockReturnValue([]),
       }));
       vi.resetModules();
       const { default: initializeSandbox } = await import(
@@ -83,7 +84,7 @@ describe('initialize module', () => {
     it('does NOT include a -v flag when FILES_DIR is unset', async () => {
       vi.doMock('../src/runUtils', () => ({
         getFilesDir: vi.fn().mockReturnValue(''),
-        getMountFlag: vi.fn().mockReturnValue(''),
+        getMountArgs: vi.fn().mockReturnValue([]),
       }));
       vi.resetModules();
       const { default: initializeSandbox } = await import(
@@ -97,10 +98,12 @@ describe('initialize module', () => {
       expect(args.join(' ')).not.toContain('-v ');
     });
 
-    it('includes the -v flag when getMountFlag returns one', async () => {
+    it('includes the -v flag when getMountArgs returns one', async () => {
       vi.doMock('../src/runUtils', () => ({
         getFilesDir: vi.fn().mockReturnValue('/host/dir'),
-        getMountFlag: vi.fn().mockReturnValue('-v /host/dir:/workspace/files'),
+        getMountArgs: vi
+          .fn()
+          .mockReturnValue(['-v', '/host/dir:/workspace/files']),
       }));
       vi.resetModules();
       const { default: initializeSandbox } = await import(

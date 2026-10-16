@@ -1,8 +1,66 @@
+import { execFile } from 'child_process';
+import util from 'util';
 import { forceStopContainer as dockerForceStopContainer } from './dockerUtils.ts';
 import { logger } from './logger.ts';
 
+const execFilePromise = util.promisify(execFile);
+
 // Registry for active sandbox containers: Map<containerId, creationTimestamp>
 export const activeSandboxContainers = new Map<string, number>();
+
+// Every sandbox container carries the PID of the server that created it, so a
+// later server can tell which containers lost their owner.
+export const OWNER_PID_LABEL = 'mcp-server-pid';
+
+export function getSandboxLabels(): string[] {
+  return ['mcp-sandbox=true', `${OWNER_PID_LABEL}=${process.pid}`];
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process exists but belongs to another user
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Removes sandbox containers whose owning server process no longer exists.
+ * Graceful shutdown cannot run when the server is killed outright (e.g. the
+ * MCP client is force-closed), so this sweep catches what it left behind.
+ * Containers without an owner PID label are left alone.
+ */
+export async function removeOrphanedContainers(): Promise<void> {
+  let stdout: string;
+  try {
+    ({ stdout } = await execFilePromise('docker', [
+      'ps',
+      '-a',
+      '--filter',
+      'label=mcp-sandbox=true',
+      '--format',
+      `{{.ID}} {{.Label "${OWNER_PID_LABEL}"}}`,
+    ]));
+  } catch {
+    // Docker is not running; nothing to sweep
+    return;
+  }
+
+  for (const line of stdout.split('\n')) {
+    const [containerId, pid] = line.trim().split(' ');
+    if (!containerId || !pid) continue;
+
+    const ownerPid = Number(pid);
+    if (ownerPid === process.pid || isProcessAlive(ownerPid)) continue;
+
+    logger.warning(
+      `Container ${containerId} belongs to dead server process ${ownerPid}. Removing.`
+    );
+    await dockerForceStopContainer(containerId);
+  }
+}
 
 /**
  * Starts the periodic scavenger task to clean up timed-out containers.
@@ -21,6 +79,10 @@ export function startScavenger(
   );
 
   const scavengerInterval = setInterval(() => {
+    removeOrphanedContainers().catch((error) =>
+      logger.error('Error while removing orphaned containers', error)
+    );
+
     const now = Date.now();
     if (activeSandboxContainers.size > 0) {
       logger.debug(

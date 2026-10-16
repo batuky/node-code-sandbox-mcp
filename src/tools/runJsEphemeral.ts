@@ -11,7 +11,11 @@ import {
   preprocessDependencies,
   computeResourceLimits,
 } from '../utils.ts';
-import { prepareWorkspace, getMountFlag } from '../runUtils.ts';
+import { prepareWorkspace, getMountArgs } from '../runUtils.ts';
+import {
+  activeSandboxContainers,
+  getSandboxLabels,
+} from '../containerUtils.ts';
 import {
   changesToMcpContent,
   detectChanges,
@@ -23,6 +27,7 @@ import {
   safeExecNodeInContainer,
 } from '../dockerUtils.ts';
 import { lintAndRefactorCode } from '../linterUtils.ts';
+import { logger } from '../logger.ts';
 
 const NodeDependency = z.object({
   name: z.string().describe('npm package name, e.g. lodash'),
@@ -79,7 +84,6 @@ export default async function runJsEphemeral({
   const containerId = `js-ephemeral-${randomUUID()}`;
   const tmpDir = tmp.dirSync({ unsafeCleanup: true });
   const { memFlag, cpuFlag } = computeResourceLimits(image);
-  const mountFlag = getMountFlag();
 
   try {
     // Start an ephemeral container
@@ -92,7 +96,8 @@ export default async function runJsEphemeral({
       ...cpuFlag.split(' ').filter(Boolean),
       '--workdir',
       '/workspace',
-      ...mountFlag.split(' ').filter(Boolean),
+      ...getMountArgs(),
+      ...getSandboxLabels().flatMap((label) => ['--label', label]),
       '--name',
       containerId,
       image,
@@ -100,6 +105,8 @@ export default async function runJsEphemeral({
       '-f',
       '/dev/null',
     ]);
+    // Registered so graceful shutdown also removes in-flight ephemeral runs
+    activeSandboxContainers.set(containerId, Date.now());
 
     // Prepare workspace locally
     const localWorkspace = await prepareWorkspace({
@@ -178,7 +185,16 @@ export default async function runJsEphemeral({
       ],
     };
   } finally {
-    execFileSync('docker', ['rm', '-f', containerId]);
+    try {
+      execFileSync('docker', ['rm', '-f', containerId]);
+      activeSandboxContainers.delete(containerId);
+    } catch (error) {
+      // A failed cleanup must not mask the run's result. The container stays
+      // registered, so the scavenger and graceful shutdown retry it.
+      logger.warning(
+        `Failed to remove ephemeral container ${containerId}: ${String(error)}`
+      );
+    }
     tmpDir.removeCallback();
   }
 }

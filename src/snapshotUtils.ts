@@ -28,6 +28,10 @@ export const getMountPointDir = () => {
 export async function getSnapshot(dir: string): Promise<FileSnapshot> {
   const snapshot: FileSnapshot = {};
 
+  // Without FILES_DIR there is no mounted directory to watch. Globbing an
+  // undefined cwd would scan the server's working directory instead.
+  if (!dir) return snapshot;
+
   const executor = glob('**/*', {
     cwd: dir,
     withFileTypes: true,

@@ -8,8 +8,11 @@ import {
   isDockerRunning,
   computeResourceLimits,
 } from '../utils.ts';
-import { getMountFlag } from '../runUtils.ts';
-import { activeSandboxContainers } from '../containerUtils.ts';
+import { getMountArgs } from '../runUtils.ts';
+import {
+  activeSandboxContainers,
+  getSandboxLabels,
+} from '../containerUtils.ts';
 import { logger } from '../logger.ts';
 import stopSandbox from './stop.ts';
 
@@ -49,12 +52,11 @@ export default async function initializeSandbox({
 
   // Construct labels
   const labels = [
-    `mcp-sandbox=true`,
+    ...getSandboxLabels(),
     `mcp-server-run-id=${serverRunId}`,
     `mcp-creation-timestamp=${creationTimestamp}`,
   ];
   const { memFlag, cpuFlag } = computeResourceLimits(image);
-  const mountFlag = getMountFlag();
 
   try {
     const args = [
@@ -65,7 +67,7 @@ export default async function initializeSandbox({
       ...cpuFlag.split(' '),
       '--workdir',
       '/workspace',
-      ...mountFlag.split(' '),
+      ...getMountArgs(),
       ...labels.flatMap((label) => ['--label', label]),
       '--name',
       containerId,
