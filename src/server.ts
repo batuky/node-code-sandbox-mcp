@@ -22,7 +22,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import { getConfig } from './config.ts';
-import { startScavenger, cleanActiveContainers } from './containerUtils.ts';
+import {
+  startScavenger,
+  cleanActiveContainers,
+  removeOrphanedContainers,
+} from './containerUtils.ts';
 import { setServerInstance, logger } from './logger.ts';
 import getDependencyTypes, {
   argSchema as getDependencyTypesSchema,
@@ -136,7 +140,8 @@ server.resource(
   'file',
   new ResourceTemplate('file://{+filepath}', { list: undefined }),
   async (uri) => {
-    const filepath = new URL(uri).pathname;
+    // fileURLToPath, unlike URL.pathname, yields a valid path on Windows too
+    const filepath = fileURLToPath(uri);
     const data = await fs.readFile(filepath);
     const mimeType = mime.lookup(filepath) || 'application/octet-stream';
     return {
@@ -172,7 +177,16 @@ const scavengerIntervalHandle = startScavenger(
   getConfig().containerTimeoutSeconds
 );
 
+// Clean up after previous servers that were killed before they could shut down
+removeOrphanedContainers().catch((error) =>
+  logger.error('Error while removing orphaned containers', error)
+);
+
+let shuttingDown = false;
+
 async function gracefulShutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
   clearInterval(scavengerIntervalHandle);
@@ -189,6 +203,12 @@ async function gracefulShutdown(signal: string) {
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
+// Windows sends SIGHUP when the console window closes
+process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+// The MCP client went away (closed, crashed or killed) without signalling us.
+// Without this, the scavenger interval keeps the process alive indefinitely.
+process.stdin.on('end', () => gracefulShutdown('stdin end'));
+process.stdin.on('close', () => gracefulShutdown('stdin close'));
 
 // Set up the transport
 const transport = new StdioServerTransport();

@@ -21,9 +21,9 @@ export async function forceStopContainer(containerId: string): Promise<void> {
     // Sanitize containerId
     const safeId = sanitizeContainerId(containerId);
     if (!safeId) throw new Error('Invalid containerId');
-    // Force stop the container (ignores errors if already stopped)
-    await execFilePromise('docker', ['stop', safeId]);
-    // Force remove the container (ignores errors if already removed)
+    // Kill and remove in one step. `docker stop` would wait 10s, because the
+    // sandbox's PID 1 (`tail -f /dev/null`) ignores SIGTERM, and that delay can
+    // outlast the time the MCP client gives us to shut down.
     await execFilePromise('docker', ['rm', '-f', safeId]);
     logger.info(
       `Successfully issued stop/remove commands for container: ${containerId}`

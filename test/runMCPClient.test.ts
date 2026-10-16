@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { tmpdir } from 'os';
 import { mkdtempSync, rmSync, readFileSync } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import dotenv from 'dotenv';
@@ -11,7 +12,7 @@ import { execSync } from 'child_process';
 import { normalizeMountPath } from './utils.ts';
 
 dotenv.config();
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('Node.js Code Sandbox MCP Tests', () => {
   let hostWorkspaceDir: string;
