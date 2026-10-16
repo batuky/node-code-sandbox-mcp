@@ -120,7 +120,6 @@ export default async function runJsEphemeral({
     ]);
 
     // Generate snapshot of the workspace
-    const snapshotStartTime = Date.now();
     const snapshot = await getSnapshot(getMountPointDir());
 
     // Run install and script inside container
@@ -159,11 +158,7 @@ export default async function runJsEphemeral({
 
     // Detect the file changed during the execution of the tool in the mounted workspace
     // and report the changes to the user
-    const changes = await detectChanges(
-      snapshot,
-      getMountPointDir(),
-      snapshotStartTime
-    );
+    const changes = await detectChanges(snapshot, getMountPointDir());
 
     const extractedContents = await changesToMcpContent(changes);
 

@@ -53,10 +53,14 @@ export async function getSnapshot(dir: string): Promise<FileSnapshot> {
   return snapshot;
 }
 
+// Changes are found by comparing against the earlier snapshot only. Both
+// snapshots carry mtimes from the same filesystem, so no clock is shared with
+// this process. Comparing mtimes to Date.now() is unsafe: on Docker Desktop the
+// host and VM clocks drift by several hundred ms, which hid files created by
+// a fast run.
 export async function detectChanges(
   prevSnapshot: FileSnapshot,
-  dir: string,
-  sinceTimeMs: number
+  dir: string
 ): Promise<Change[]> {
   const changes: Change[] = [];
   const currentSnapshot = await getSnapshot(dir);
@@ -70,7 +74,7 @@ export async function detectChanges(
     const prev = prevSnapshot[filePath];
     const curr = currentSnapshot[filePath];
 
-    if (!prev && curr && curr.mtimeMs >= sinceTimeMs) {
+    if (!prev && curr) {
       changes.push({
         type: 'created',
         path: filePath,
@@ -82,12 +86,7 @@ export async function detectChanges(
         path: filePath,
         isDirectory: prev.isDirectory,
       });
-    } else if (
-      prev &&
-      curr &&
-      curr.mtimeMs > prev.mtimeMs &&
-      curr.mtimeMs >= sinceTimeMs
-    ) {
+    } else if (prev && curr && curr.mtimeMs > prev.mtimeMs) {
       changes.push({
         type: 'updated',
         path: filePath,

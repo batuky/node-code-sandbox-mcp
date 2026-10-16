@@ -93,7 +93,6 @@ export default async function runJs({
   let rawOutput: string = '';
 
   // Generate snapshot of the workspace
-  const snapshotStartTime = Date.now();
   const snapshot = await getSnapshot(getMountPointDir());
 
   if (listenOnPort) {
@@ -174,11 +173,7 @@ export default async function runJs({
 
   // Detect the file changed during the execution of the tool in the mounted workspace
   // and report the changes to the user
-  const changes = await detectChanges(
-    snapshot,
-    getMountPointDir(),
-    snapshotStartTime
-  );
+  const changes = await detectChanges(snapshot, getMountPointDir());
 
   const extractedContents = await changesToMcpContent(changes);
   localWorkspace.removeCallback();
